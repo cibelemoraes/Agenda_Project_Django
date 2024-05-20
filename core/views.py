@@ -4,6 +4,9 @@ from core.models import Evento
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import authenticate, login, logout
 from django.contrib import messages
+from django.utils.dateparse import parse_datetime
+from datetime import datetime, timedelta
+from django.http.response import Http404
 
 # Create your views here.
 
@@ -33,7 +36,9 @@ def submit_login(request):
 @login_required(login_url='/login/')
 def lista_eventos(request):
     usuario = request.user
-    evento = Evento.objects.filter(usuario=usuario)
+    data_atual = datetime.now() - timedelta(hours=1)
+    evento = Evento.objects.filter(usuario=usuario,
+                                   data_evento__gt=data_atual)
     dados = {'eventos': evento}
     return render(request, 'agenda.html', dados)
 
@@ -55,22 +60,34 @@ def submit_evento(request):
         descricao = request.POST.get('descricao')
         usuario = request.user
         id_evento = request.POST.get('id_evento')
-        if id_evento:
-           Evento.objects.filter(id=id_evento).update(titulo=titulo,
-                                                      data_evento=data_evento,
-                                                       descricao=descricao)
 
-        if titulo and data_evento and descricao:
-            Evento.objects.create(
+        # Analisando a data e hora para garantir que esteja no formato correto
+        data_evento = parse_datetime(data_evento)
+
+        if data_evento is None:
+            return render(request, 'evento.html', {'error': 'Invalid date format'})
+
+        if id_evento:
+            Evento.objects.filter(id=id_evento).update(
                 titulo=titulo,
                 data_evento=data_evento,
                 descricao=descricao,
                 usuario=usuario
             )
-            return redirect('/agenda/')  # Redirecione para a página correta após o salvamento
         else:
-            return HttpResponse("Faltam informações no formulário.")
-    return redirect('/agenda/')
+            if titulo and data_evento and descricao:
+                Evento.objects.create(
+                    titulo=titulo,
+                    data_evento=data_evento,
+                    descricao=descricao,
+                    usuario=usuario
+                )
+            else:
+                return HttpResponse("Faltam informações no formulário.")
+
+        return redirect('/agenda/')  # Redirecione para a página correta após o salvamento
+
+    return redirect('/')
 
 
 @login_required(login_url='/login/')
